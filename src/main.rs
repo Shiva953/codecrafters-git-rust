@@ -103,7 +103,7 @@ fn main() {
         // LS-TREE COMMAND IMPLEMENTATION, GET IT!
         //git ls-tree --name-only <tree_sha>
 
-        //STEP1 : GET THE TREE CONTENTS FROM THE TREE_SHA(TREE_SHA -> TREE OBJECT -> COMPRESSED CONTENT -> TREE CONTENTS(IN STRING FORMAT))
+        // STEP1: GET THE TREE CONTENTS FROM THE TREE_SHA(TREE_SHA -> TREE OBJECT -> COMPRESSED CONTENT -> TREE CONTENTS(IN STRING FORMAT))
         // STEP2: EXTRACT (FILES, DIRS) FROM THE STRING OF GIVEN FORM + STDOUT
 
         let tree_sha = &args[3]; //TREE OBJECT IF DIR, BLOB OBJECT IF FILE
@@ -120,17 +120,17 @@ fn main() {
         <mode> <name>\0<20_byte_sha>
         <mode> <name>\0<20_byte_sha>
          */
-        let readable_tree = String::from_utf8(tree_file_contents_vec).unwrap();
-        let final_output = extract_content_from_tree_string(&readable_tree);
 
-        match final_output.clone() {
-            Some(x) => {
-                print!("{}", x)
-            },
-            None => print!("Invalid tree object")
+        //IMPROVE ERROR HANDLING
+        let entries = parse_tree_object(&tree_file_contents_vec);
+        // print!("tree string: {}", readable_tree);
+        // let entries = extract_content_from_tree_string(&readable_tree);
+
+        for name in entries {
+            println!("{}", name);
         }
 
-        //TEST THIS(GET MEMBERSHIP) + ITERATE
+
     }
     else if (args[1] == "write-tree") {
         // WRITE-TREE COMMAND IMPLEMENTATION
@@ -174,3 +174,36 @@ fn extract_content_from_tree_string(input: &str) -> Option<String> {
     }
 }
 
+fn parse_tree_object(content: &[u8]) -> Vec<String> {
+    let mut entries = Vec::new();
+    let mut i = 0;
+
+    // Skip the header (everything before the first null byte)
+    while i < content.len() && content[i] != 0 {
+        i += 1;
+    }
+    i += 1; // Skip the null byte
+
+    // Parse entries
+    while i < content.len() {
+        let mut name = Vec::new();
+        // Skip mode
+        while i < content.len() && content[i] != b' ' {
+            i += 1;
+        }
+        i += 1; // Skip space
+        // Read name
+        while i < content.len() && content[i] != 0 {
+            name.push(content[i]);
+            i += 1;
+        }
+        i += 1; // Skip null byte
+        i += 20; // Skip SHA (20 bytes)
+
+        if let Ok(name_str) = String::from_utf8(name) {
+            entries.push(name_str);
+        }
+    }
+
+    entries
+}
