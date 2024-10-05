@@ -45,7 +45,8 @@ fn main() {
 
         //Step3: EXTRACT CONTENT from the DECOMPRESSED DATA
         let mut blob_file_contents_vec = Vec::new();
-        decompressed_data.read_to_end(&mut blob_file_contents_vec) ;//filling the buffer with contents of blob file
+        //improve error handling
+        decompressed_data.read_to_end(&mut blob_file_contents_vec).unwrap() ;//filling the buffer with contents of blob file
         //buffer needs to be converted to string
         let readable_blob = String::from_utf8(blob_file_contents_vec).unwrap();
         // now extract <content> from blob <size>\0<content>
@@ -77,8 +78,8 @@ fn main() {
         // STEP 2 - COMPUTE THE SHA1HASH(blob <size>\0<original file contents>)
         let mut hasher = Sha1::new();
         hasher.update(sha_input.clone());
-        let mut hash_result = hasher.finalize();
-        let mut hash = format!("{:x}", hash_result);
+        let hash_result = hasher.finalize();
+        let hash = format!("{:x}", hash_result);
         print!("{}", &hash);
 
 
@@ -96,7 +97,7 @@ fn main() {
 
         // STEP 4 - COMPRESS THE CONTENTS OF THE ORIGINAL FILE USING ZLIB AND WRITE IT TO THE .git/objects/[hash[..2]]/[hash[2..]] file
         let mut encoder = ZlibEncoder::new(blob_object_file, Compression::default());
-        encoder.write_all(sha_input.as_bytes());
+        encoder.write_all(sha_input.as_bytes()).unwrap();
         encoder.finish().unwrap();
     }
     else if (args[1] == "ls-tree") {
