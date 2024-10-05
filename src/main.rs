@@ -60,39 +60,44 @@ fn main() {
         // ex file hello.txt
 
         // STEP 1 - TAKE ORIGINAL CONTENTS OF EXAMPLE FILE
-        let filename = args[3];
-        let path = format!("./{}", filename);
+        let path = &args[3];
+        // let path = format!("./{}", filename);
         let content = fs::read_to_string(path.clone());
-        let sha_input = match fs::read_to_string(path.clone()){
+        let sha_input = match fs::read_to_string(path.clone()){ //BLOB FILE CONTENT
             Ok(x) => {
-                let size = fs::metadata(path.clone())?.len();
+                let size = fs::metadata(path.clone()).unwrap().len();
                 format!("blob {}\0{}", size, x)
             },
             Err(e) => {
                 "invalidfilecontent".to_string()
             }
         };
+        // print!("sha_input {}", sha_input);
 
         // STEP 2 - COMPUTE THE SHA1HASH(blob <size>\0<original file contents>)
         let mut hasher = Sha1::new();
         hasher.update(sha_input.clone());
-        let mut hash = hasher.finalize();
+        let mut hash_result = hasher.finalize();
+        let mut hash = format!("{:x}", hash_result);
+        print!("{}", &hash);
+
 
         // STEP 3 - CREATE THE .git/objects/[hash[..2]]/[hash[2..]] file
         let dir_name = &hash[..2];
         let file_name = &hash[2..];
+
         // Create the full path .git/objects/[hash[..2]]/[hash[2..]]
         let dir_path = format!(".git/objects/{}", dir_name);
         let file_path = format!("{}/{}", dir_path, file_name);
         // create directory for blob object
-        fs::create_dir_all(&dir_path)?;
+        fs::create_dir_all(&dir_path).unwrap();
         // Create blob object file
-        let mut blob_object_file = fs::File::create(file_path)?;
+        let mut blob_object_file = fs::File::create(file_path).unwrap();
 
         // STEP 4 - COMPRESS THE CONTENTS OF THE ORIGINAL FILE USING ZLIB AND WRITE IT TO THE .git/objects/[hash[..2]]/[hash[2..]] file
         let mut encoder = ZlibEncoder::new(blob_object_file, Compression::default());
-        encoder.write_all(content.unwrap().as_bytes());
-        encoder.finish()?;
+        encoder.write_all(sha_input.as_bytes());
+        encoder.finish().unwrap();
     }
     else if (args[1] == "ls-tree") {
         // LS-TREE COMMAND IMPLEMENTATION, GET IT!
@@ -116,11 +121,11 @@ fn main() {
         <mode> <name>\0<20_byte_sha>
          */
         let readable_tree = String::from_utf8(tree_file_contents_vec).unwrap();
-        let final_output = extract_content_from_tree_string(input);
+        let final_output = extract_content_from_tree_string(&readable_tree);
 
         match final_output.clone() {
             Some(x) => {
-                print!(x)
+                print!("{}", x)
             },
             None => print!("Invalid tree object")
         }
@@ -129,7 +134,8 @@ fn main() {
     }
     else if (args[1] == "write-tree") {
         // WRITE-TREE COMMAND IMPLEMENTATION
-        
+
+
     }
     else {
         println!("unknown command: {}", args[1])
@@ -148,17 +154,15 @@ fn extract_content(input: &str) -> Option<&str> {
 
 fn extract_content_from_tree_string(input: &str) -> Option<String> {
     let mut result = String::new();
-    
-    // Skip the first line
-    let content = input.splitn(2, '\0').nth(1)?;
+
+    let content = input.splitn(2, '\0').nth(1).unwrap();
     
     for line in content.split('\0') {
-        let name = line.split_whitespace().nth(1)?;
+        let name = line.split_whitespace().nth(1).unwrap();
         result.push_str(name);
         result.push('\n');
     }
-    
-    // Remove the last newline if it exists
+
     if result.ends_with('\n') {
         result.pop();
     }
