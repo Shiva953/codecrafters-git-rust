@@ -3,6 +3,7 @@ use std::env;
 use std::fmt::format;
 #[allow(unused_imports)]
 use std::fs;
+use std::result;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
@@ -93,6 +94,43 @@ fn main() {
         encoder.write_all(content.unwrap().as_bytes());
         encoder.finish()?;
     }
+    else if (args[1] == "ls-tree") {
+        // LS-TREE COMMAND IMPLEMENTATION, GET IT!
+        //git ls-tree --name-only <tree_sha>
+
+        //STEP1 : GET THE TREE CONTENTS FROM THE TREE_SHA(TREE_SHA -> TREE OBJECT -> COMPRESSED CONTENT -> TREE CONTENTS(IN STRING FORMAT))
+        // STEP2: EXTRACT (FILES, DIRS) FROM THE STRING OF GIVEN FORM + STDOUT
+
+        let tree_sha = &args[3]; //TREE OBJECT IF DIR, BLOB OBJECT IF FILE
+
+        //DECOMPRESS THE FILE CONTENTS OF THE BELOW PATH
+        let path = format!(".git/objects/{}/{}", &tree_sha[..2], &tree_sha[2..]);
+        let content = fs::read(path).unwrap();
+        let mut decompressed_data = ZlibDecoder::new(&content[..]);
+        let mut tree_file_contents_vec = Vec::new();
+        decompressed_data.read_to_end(&mut tree_file_contents_vec);
+        //final string of the form
+        /*
+        tree <size>\0
+        <mode> <name>\0<20_byte_sha>
+        <mode> <name>\0<20_byte_sha>
+         */
+        let readable_tree = String::from_utf8(tree_file_contents_vec).unwrap();
+        let final_output = extract_content_from_tree_string(input);
+
+        match final_output.clone() {
+            Some(x) => {
+                print!(x)
+            },
+            None => print!("Invalid tree object")
+        }
+
+        //TEST THIS(GET MEMBERSHIP) + ITERATE
+    }
+    else if (args[1] == "write-tree") {
+        // WRITE-TREE COMMAND IMPLEMENTATION
+        
+    }
     else {
         println!("unknown command: {}", args[1])
     }
@@ -105,6 +143,30 @@ fn extract_content(input: &str) -> Option<&str> {
         Some(&input[null_pos + 1..])
     } else {
         None
+    }
+}
+
+fn extract_content_from_tree_string(input: &str) -> Option<String> {
+    let mut result = String::new();
+    
+    // Skip the first line
+    let content = input.splitn(2, '\0').nth(1)?;
+    
+    for line in content.split('\0') {
+        let name = line.split_whitespace().nth(1)?;
+        result.push_str(name);
+        result.push('\n');
+    }
+    
+    // Remove the last newline if it exists
+    if result.ends_with('\n') {
+        result.pop();
+    }
+    
+    if result.is_empty() {
+        None
+    } else {
+        Some(result)
     }
 }
 
