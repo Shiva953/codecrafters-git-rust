@@ -1,11 +1,7 @@
 #[allow(unused_imports)]
 use std::env;
-use std::fmt::format;
 #[allow(unused_imports)]
 use std::fs;
-use std::fs::File;
-use std::os::unix::fs::MetadataExt;
-use std::result;
 use anyhow::Error;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
@@ -33,7 +29,7 @@ fn main() {
         fs::create_dir(".git/refs").unwrap();
         fs::write(".git/HEAD", "ref: refs/heads/main\n").unwrap();
         println!("Initialized git directory")
-    } else if (args[1] == "cat-file") {
+    } else if args[1] == "cat-file" {
         // read the blob object
 
         // HOW TO IDENTIFY A BLOB FILE IN THE FIRST PLACE?
@@ -61,7 +57,7 @@ fn main() {
             None => print!("No content found"),
         }
 
-    } else if(args[1] == "hash-object"){
+    } else if args[1] == "hash-object" {
         // replicating command "git hash-object -w hello.txt"
         // create the blob file
         // ex file hello.txt
@@ -69,7 +65,6 @@ fn main() {
         // STEP 1 - TAKE ORIGINAL CONTENTS OF EXAMPLE FILE
         let path = &args[3];
         // let path = format!("./{}", filename);
-        let content = fs::read_to_string(path.clone());
         let sha_input = match fs::read_to_string(path.clone()){ //BLOB FILE CONTENT
             Ok(x) => {
                 let size = fs::metadata(path.clone()).unwrap().len();
@@ -101,14 +96,14 @@ fn main() {
         fs::create_dir_all(&dir_path).unwrap();
 
         // Create blob object file
-        let mut blob_object_file = fs::File::create(file_path).unwrap();
+        let blob_object_file = fs::File::create(file_path).unwrap();
 
         // STEP 4 - COMPRESS THE CONTENTS OF THE ORIGINAL FILE USING ZLIB AND WRITE IT TO THE .git/objects/[hash[..2]]/[hash[2..]] file
         let mut encoder = ZlibEncoder::new(blob_object_file, Compression::default());
         encoder.write_all(sha_input.as_bytes()).unwrap();
         encoder.finish().unwrap();
     }
-    else if (args[1] == "ls-tree") {
+    else if args[1] == "ls-tree" {
         // LS-TREE COMMAND IMPLEMENTATION, GET IT!
         //git ls-tree --name-only <tree_sha>
 
@@ -140,7 +135,7 @@ fn main() {
         }
 
     }
-    else if (args[1] == "write-tree") {
+    else if args[1] == "write-tree" {
         // WRITE-TREE COMMAND IMPLEMENTATION
         // The git write-tree command creates a tree object from the current state of the "staging area". 
         // so it takes the staging area files in the WORKING DIRECTORY into consideration
@@ -150,13 +145,6 @@ fn main() {
         // TREE HASH = SHA(DIRECTORY CONTENT) = SHA(FILE CONTENTS + DIR CONTENT) = SHA(FILE CONTENTS + SHA(FILES + DIRS INSIDE IT)) = ...
         // STEP 3: CREATE OBJECT in .git/objects
 
-        // let staging_area = Path::read_dir("./").unwrap();
-        let working_dir = env::current_dir().expect("Failed to get current directory");
-        let working_dir_entries = std::fs::read_dir(".").expect("Failed to read directory");
-        let final_hash = Sha1::new();
-        
-         let hashes:Vec<String> = Vec::new();
-        //  let mut content = Vec::new();
          let mut files: Vec<(String, String)> = Vec::new(); //[...(file_name,mode)]
 
         if let Ok(entries) = fs::read_dir(".") { //entries in the current working directory
@@ -206,6 +194,9 @@ fn main() {
 
 
         //get the final hash and write the file to .git/objects
+    }
+    else if args[1] == "commit"{
+        
     }
     else {
         println!("unknown command: {}", args[1])
@@ -291,7 +282,7 @@ fn create_tree(files: &[(String, String)]) -> Result<String, Error> {
         let entry = format!("{} {}\0", mode, name).into_bytes();
         tree_content.extend_from_slice(&entry);
         tree_content.extend_from_slice(&hex::decode(hash).map_err(|e| {
-            Error::new(std::io::ErrorKind::InvalidData)
+            Error::new(e)
         })?);
     }
     
