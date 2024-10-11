@@ -1,5 +1,6 @@
 #[allow(unused_imports)]
 use std::env;
+use std::fmt::format;
 #[allow(unused_imports)]
 use std::fs;
 use anyhow::Error;
@@ -139,11 +140,11 @@ fn main() {
         print!("{}", tree_hash);
         
     }
-    else if args[1] == "commit"{
+    else if args[1] == "commit-tree"{
         // commit object:
         // git commit <tree_sha> -p <parent_commit_sha> -m <message>
 
-        let message = &args[6];
+        let message = format!("{}\n", args[6]);
         let parent_commit_sha = &args[4];
         let tree_sha = &args[2];
 
@@ -169,13 +170,12 @@ fn main() {
             parent_commit_sha,
             author_name, author_email, timestamp, timezone,
             committer_name, committer_email, timestamp, timezone,
-            message
+            message,
         );
 
-        // Calculate the size of the content
+
         let size = content.len();
 
-        // Construct the final commit object string
         let commit_obj_str = format!("commit {}\0{}", size, content);
         let mut hasher = Sha1::new();
         hasher.update(commit_obj_str.clone());
@@ -187,13 +187,12 @@ fn main() {
         let dir_name = &commit_hash[..2];
         let file_name = &commit_hash[2..];
 
-        // Create the full path .git/objects/[hash[..2]]/[hash[2..]]
         let dir_path = format!(".git/objects/{}", dir_name);
         let file_path = format!("{}/{}", dir_path, file_name);
-        // create directory for blob object
+
         fs::create_dir_all(&dir_path).unwrap();
 
-        // Create commit object file
+
         let commit_object_file = fs::File::create(file_path).unwrap();
 
         // STEP 4 - COMPRESS THE CONTENTS OF THE ORIGINAL FILE USING ZLIB AND WRITE IT TO THE .git/objects/[hash[..2]]/[hash[2..]] file
