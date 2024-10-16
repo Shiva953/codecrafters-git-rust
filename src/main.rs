@@ -1,19 +1,3 @@
-#[allow(unused_imports)]
-use std::env;
-use std::fmt::format;
-#[allow(unused_imports)]
-use std::fs;
-use anyhow::Error;
-use flate2::read::ZlibDecoder;
-use flate2::write::ZlibEncoder;
-use flate2::Compression;
-use std::ffi::CStr;
-use std::io::prelude::*;
-use std::io::Write;
-use std::path::Path;
-use sha1::{Digest, Sha1};
-
-
 mod commands;
 
 use std::env;
