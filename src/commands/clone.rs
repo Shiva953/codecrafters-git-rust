@@ -69,7 +69,10 @@ impl Clone {
 
         let mut refs = Vec::new();
         for line in response.lines().skip(2) {
-            let line = line.trim_start_matches(|c: char| c.is_ascii_hexdigit() || c == ' ');
+            if line.len() < 4 {
+                continue;
+            }
+            let line = &line[4..]; // Skip the 4-digit length prefix
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
@@ -83,6 +86,7 @@ impl Clone {
             return Err("No valid refs found in the response".to_string());
         }
 
+        println!("Parsed refs: {:?}", refs);
         Ok(refs)
     }
 
