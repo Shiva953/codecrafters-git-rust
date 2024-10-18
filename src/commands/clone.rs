@@ -16,11 +16,13 @@ impl Clone {
         let repo_url = &args[0];
         let target_dir = &args[1];
 
+        // Create target directory
         fs::create_dir_all(target_dir).map_err(|e| format!("Failed to create target directory: {}", e))?;
-
         let refs = Self::discover_refs(repo_url)?;
         let packfile = Self::fetch_packfile(repo_url, &refs)?;
+
         Self::process_packfile(&packfile, target_dir)?;
+
         Self::update_refs(target_dir, &refs)?;
 
         Ok(())
@@ -33,15 +35,31 @@ impl Clone {
             .text()
             .map_err(|e| format!("Failed to read refs response: {}", e))?;
 
-        // Parse the response to extract refs
-        let refs: Vec<(String, String)> = response
-            .lines()
-            .filter(|line| line.contains("refs/"))
-            .map(|line| {
-                let parts: Vec<&str> = line.split('\t').collect();
-                (parts[1].to_string(), parts[0].to_string())
-            })
-            .collect();
+        let mut refs = Vec::new();
+
+        for line in response.lines() {
+            if line.starts_with("# service=git-upload-pack") || line.is_empty() {
+                continue;
+            }
+
+            let line = line.trim_start_matches(|c: char| c.is_ascii_hexdigit());
+            
+            if line.contains('\0') {
+                let parts: Vec<&str> = line.split('\0').collect();
+                if parts.len() >= 2 {
+                    refs.push((parts[1].to_string(), parts[0].to_string()));
+                }
+            } else if line.contains(' ') {
+                let parts: Vec<&str> = line.split(' ').collect();
+                if parts.len() >= 2 {
+                    refs.push((parts[1].to_string(), parts[0].to_string()));
+                }
+            }
+        }
+
+        if refs.is_empty() {
+            return Err("No valid refs found in the response".to_string());
+        }
 
         Ok(refs)
     }
