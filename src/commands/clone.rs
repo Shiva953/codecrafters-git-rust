@@ -1,8 +1,8 @@
 use std::fs;
-use std::path::Path;
-use reqwest;
+use std::io::{Cursor, Read};
+use std::path::{Path, PathBuf};
 use flate2::read::ZlibDecoder;
-use std::io::Read;
+use reqwest;
 use sha1::{Sha1, Digest};
 
 pub struct Clone;
@@ -14,16 +14,41 @@ impl Clone {
         }
 
         let repo_url = &args[0];
-        let target_dir = &args[1];
+        let target_dir = Path::new(&args[1]);
 
         // Create target directory
         fs::create_dir_all(target_dir).map_err(|e| format!("Failed to create target directory: {}", e))?;
+
+        // Initialize Git repository
+        Self::init_repository(target_dir)?;
+
+        // Discover references
         let refs = Self::discover_refs(repo_url)?;
+
+        // Get packfile
         let packfile = Self::fetch_packfile(repo_url, &refs)?;
 
+        // Process packfile
         Self::process_packfile(&packfile, target_dir)?;
 
+        // Update refs
         Self::update_refs(target_dir, &refs)?;
+
+        println!("Repository cloned successfully.");
+        Ok(())
+    }
+
+    fn init_repository(target_dir: &Path) -> Result<(), String> {
+        let git_dir = target_dir.join(".git");
+        fs::create_dir_all(&git_dir).map_err(|e| format!("Failed to create .git directory: {}", e))?;
+        
+        for dir in &["objects", "refs", "refs/heads"] {
+            fs::create_dir_all(git_dir.join(dir))
+                .map_err(|e| format!("Failed to create {} directory: {}", dir, e))?;
+        }
+
+        fs::write(git_dir.join("HEAD"), "ref: refs/heads/master\n")
+            .map_err(|e| format!("Failed to create HEAD file: {}", e))?;
 
         Ok(())
     }
@@ -37,23 +62,11 @@ impl Clone {
 
         let mut refs = Vec::new();
 
-        for line in response.lines() {
-            if line.starts_with("# service=git-upload-pack") || line.is_empty() {
-                continue;
-            }
-
+        for line in response.lines().skip(2) {
             let line = line.trim_start_matches(|c: char| c.is_ascii_hexdigit());
-            
-            if line.contains('\0') {
-                let parts: Vec<&str> = line.split('\0').collect();
-                if parts.len() >= 2 {
-                    refs.push((parts[1].to_string(), parts[0].to_string()));
-                }
-            } else if line.contains(' ') {
-                let parts: Vec<&str> = line.split(' ').collect();
-                if parts.len() >= 2 {
-                    refs.push((parts[1].to_string(), parts[0].to_string()));
-                }
+            let parts: Vec<&str> = line.splitn(2, ' ').collect();
+            if parts.len() == 2 {
+                refs.push((parts[1].to_string(), parts[0].to_string()));
             }
         }
 
@@ -81,22 +94,70 @@ impl Clone {
         response.bytes().map_err(|e| format!("Failed to read packfile: {}", e)).map(|b| b.to_vec())
     }
 
-    fn process_packfile(packfile: &[u8], target_dir: &str) -> Result<(), String> {
-        let mut decoder = ZlibDecoder::new(packfile);
-        let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed).map_err(|e| format!("Failed to decompress packfile: {}", e))?;
+    fn process_packfile(packfile: &[u8], target_dir: &Path) -> Result<(), String> {
+        let mut reader = Cursor::new(packfile);
+        let mut signature = [0u8; 4];
+        reader.read_exact(&mut signature).map_err(|e| format!("Failed to read packfile signature: {}", e))?;
+        if signature != b"PACK" {
+            return Err("Invalid packfile signature".to_string());
+        }
+
+        let mut version = [0u8; 4];
+        reader.read_exact(&mut version).map_err(|e| format!("Failed to read packfile version: {}", e))?;
+        let version = u32::from_be_bytes(version);
+        if version != 2 {
+            return Err(format!("Unsupported packfile version: {}", version));
+        }
+
+        let mut object_count = [0u8; 4];
+        reader.read_exact(&mut object_count).map_err(|e| format!("Failed to read object count: {}", e))?;
+        let object_count = u32::from_be_bytes(object_count);
+
+        for _ in 0..object_count {
+            Self::extract_object(&mut reader, target_dir)?;
+        }
 
         Ok(())
     }
 
-    fn update_refs(target_dir: &str, refs: &[(String, String)]) -> Result<(), String> {
-        let git_dir = Path::new(target_dir).join(".git");
-        fs::create_dir_all(git_dir.join("refs/heads")).map_err(|e| format!("Failed to create refs directory: {}", e))?;
+    fn extract_object<R: Read>(reader: &mut R, target_dir: &Path) -> Result<(), String> {
+        let mut byte = [0u8; 1];
+        reader.read_exact(&mut byte).map_err(|e| format!("Failed to read object type: {}", e))?;
+        let obj_type = (byte[0] & 0x70) >> 4;
+        let mut size = (byte[0] & 0x0F) as u64;
+        let mut shift = 4;
+
+        loop {
+            reader.read_exact(&mut byte).map_err(|e| format!("Failed to read object size: {}", e))?;
+            size |= ((byte[0] & 0x7F) as u64) << shift;
+            shift += 7;
+            if byte[0] & 0x80 == 0 {
+                break;
+            }
+        }
+
+        let mut decoder = ZlibDecoder::new(reader);
+        let mut content = Vec::new();
+        decoder.read_to_end(&mut content).map_err(|e| format!("Failed to decompress object: {}", e))?;
+
+        let hash = Sha1::digest(&content);
+        let hash_str = format!("{:x}", hash);
+        let obj_path = target_dir.join(".git/objects").join(&hash_str[..2]).join(&hash_str[2..]);
+
+        fs::create_dir_all(obj_path.parent().unwrap()).map_err(|e| format!("Failed to create object directory: {}", e))?;
+        fs::write(obj_path, content).map_err(|e| format!("Failed to write object file: {}", e))?;
+
+        Ok(())
+    }
+
+    fn update_refs(target_dir: &Path, refs: &[(String, String)]) -> Result<(), String> {
+        let git_dir = target_dir.join(".git");
 
         for (name, sha) in refs {
-            if name.starts_with("refs/heads/") {
+            if name.starts_with("refs/") {
                 let ref_file = git_dir.join(name);
-                fs::write(ref_file, sha).map_err(|e| format!("Failed to write ref {}: {}", name, e))?;
+                fs::create_dir_all(ref_file.parent().unwrap()).map_err(|e| format!("Failed to create ref directory: {}", e))?;
+                fs::write(ref_file, format!("{}\n", sha)).map_err(|e| format!("Failed to write ref {}: {}", name, e))?;
             }
         }
 
