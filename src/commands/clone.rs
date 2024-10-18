@@ -65,10 +65,14 @@ impl Clone {
             .text()
             .map_err(|e| format!("Failed to read refs response: {}", e))?;
 
-        let mut refs = Vec::new();
+        println!("Refs response:\n{}", response);
 
+        let mut refs = Vec::new();
         for line in response.lines().skip(2) {
-            let line = line.trim_start_matches(|c: char| c.is_ascii_hexdigit());
+            let line = line.trim_start_matches(|c: char| c.is_ascii_hexdigit() || c == ' ');
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
             let parts: Vec<&str> = line.splitn(2, ' ').collect();
             if parts.len() == 2 {
                 refs.push((parts[1].to_string(), parts[0].to_string()));
@@ -180,8 +184,9 @@ impl Clone {
         let obj_path = target_dir.join(".git/objects").join(&hash_str[..2]).join(&hash_str[2..]);
 
         fs::create_dir_all(obj_path.parent().unwrap()).map_err(|e| format!("Failed to create object directory: {}", e))?;
-        fs::write(obj_path, content).map_err(|e| format!("Failed to write object file: {}", e))?;
+        fs::write(&obj_path, content).map_err(|e| format!("Failed to write object file: {}", e))?;
 
+        println!("Extracted object: {}", hash_str);
         Ok(())
     }
 
