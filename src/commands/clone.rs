@@ -16,22 +16,14 @@ impl Clone {
         let repo_url = &args[0];
         let target_dir = Path::new(&args[1]);
 
-        // Create target directory
         fs::create_dir_all(target_dir).map_err(|e| format!("Failed to create target directory: {}", e))?;
 
-        // Initialize Git repository
         Self::init_repository(target_dir)?;
 
-        // Discover references
         let refs = Self::discover_refs(repo_url)?;
 
-        // Get packfile
         let packfile = Self::fetch_packfile(repo_url, &refs)?;
-
-        // Process packfile
         Self::process_packfile(&packfile, target_dir)?;
-
-        // Update refs
         Self::update_refs(target_dir, &refs)?;
 
         println!("Repository cloned successfully.");
@@ -98,8 +90,8 @@ impl Clone {
         let mut reader = Cursor::new(packfile);
         let mut signature = [0u8; 4];
         reader.read_exact(&mut signature).map_err(|e| format!("Failed to read packfile signature: {}", e))?;
-        if signature != b"PACK" {
-            return Err("Invalid packfile signature".to_string());
+        if &signature != b"PACK" {
+            return Err(format!("Invalid packfile signature: {:?}", signature));
         }
 
         let mut version = [0u8; 4];
@@ -113,10 +105,14 @@ impl Clone {
         reader.read_exact(&mut object_count).map_err(|e| format!("Failed to read object count: {}", e))?;
         let object_count = u32::from_be_bytes(object_count);
 
-        for _ in 0..object_count {
-            Self::extract_object(&mut reader, target_dir)?;
+        println!("Processing packfile with {} objects", object_count);
+
+        for i in 0..object_count {
+            Self::extract_object(&mut reader, target_dir)
+                .map_err(|e| format!("Failed to extract object {}/{}: {}", i + 1, object_count, e))?;
         }
 
+        println!("Finished processing packfile");
         Ok(())
     }
 
