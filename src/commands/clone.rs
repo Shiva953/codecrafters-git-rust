@@ -16,14 +16,27 @@ impl Clone {
         let repo_url = &args[0];
         let target_dir = Path::new(&args[1]);
 
+        println!("Cloning repository: {}", repo_url);
+        println!("Target directory: {}", target_dir.display());
+
+        // Create target directory
         fs::create_dir_all(target_dir).map_err(|e| format!("Failed to create target directory: {}", e))?;
 
+        // Initialize Git repository
         Self::init_repository(target_dir)?;
 
+        // Discover references
         let refs = Self::discover_refs(repo_url)?;
+        println!("Discovered {} refs", refs.len());
 
+        // Get packfile
         let packfile = Self::fetch_packfile(repo_url, &refs)?;
+        println!("Fetched packfile of size: {} bytes", packfile.len());
+
+        // Process packfile
         Self::process_packfile(&packfile, target_dir)?;
+
+        // Update refs
         Self::update_refs(target_dir, &refs)?;
 
         println!("Repository cloned successfully.");
@@ -75,6 +88,9 @@ impl Clone {
 
         let body = format!("0032want {}\n00000009done\n", want_ref);
 
+        println!("Sending request to: {}", url);
+        println!("Request body: {:?}", body);
+
         let client = reqwest::blocking::Client::new();
         let response = client
             .post(&url)
@@ -83,13 +99,33 @@ impl Clone {
             .send()
             .map_err(|e| format!("Failed to fetch packfile: {}", e))?;
 
-        response.bytes().map_err(|e| format!("Failed to read packfile: {}", e)).map(|b| b.to_vec())
+        if !response.status().is_success() {
+            return Err(format!("Server returned error status: {}", response.status()));
+        }
+
+        let content = response.bytes().map_err(|e| format!("Failed to read packfile: {}", e))?.to_vec();
+        
+        if content.is_empty() {
+            return Err("Received empty packfile".to_string());
+        }
+
+        println!("Received response of size: {} bytes", content.len());
+        println!("First few bytes: {:?}", &content[..std::cmp::min(content.len(), 20)]);
+
+        Ok(content)
     }
 
     fn process_packfile(packfile: &[u8], target_dir: &Path) -> Result<(), String> {
+        if packfile.len() < 12 {
+            return Err(format!("Packfile too short: {} bytes", packfile.len()));
+        }
+
         let mut reader = Cursor::new(packfile);
         let mut signature = [0u8; 4];
         reader.read_exact(&mut signature).map_err(|e| format!("Failed to read packfile signature: {}", e))?;
+        
+        println!("Packfile signature: {:?}", signature);
+        
         if &signature != b"PACK" {
             return Err(format!("Invalid packfile signature: {:?}", signature));
         }
@@ -97,6 +133,9 @@ impl Clone {
         let mut version = [0u8; 4];
         reader.read_exact(&mut version).map_err(|e| format!("Failed to read packfile version: {}", e))?;
         let version = u32::from_be_bytes(version);
+        
+        println!("Packfile version: {}", version);
+        
         if version != 2 {
             return Err(format!("Unsupported packfile version: {}", version));
         }
