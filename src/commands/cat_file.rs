@@ -9,7 +9,7 @@ impl CatFile {
         if args.is_empty() {
             return Err("Usage: cat-file <blob_hash>".to_string());
         }
-        let blob_hash = &args[0];
+        let blob_hash = &args[1];
         let content = fs::read(format!(".git/objects/{}/{}", &blob_hash[..2], &blob_hash[2..]))
             .map_err(|e| e.to_string())?;
         

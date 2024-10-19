@@ -11,7 +11,7 @@ impl HashObject {
         if args.is_empty() {
             return Err("Usage: hash-object <filename>".to_string());
         }
-        let filename = &args[0];
+        let filename = &args[1];
         let sha_input = match fs::read_to_string(filename) {
             Ok(x) => {
                 let size = fs::metadata(filename).map_err(|e| e.to_string())?.len();

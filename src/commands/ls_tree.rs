@@ -9,7 +9,7 @@ impl LsTree {
         if args.is_empty() {
             return Err("Usage: ls-tree <tree_sha>".to_string());
         }
-        let tree_sha = &args[0];
+        let tree_sha = &args[1];
         let path = format!(".git/objects/{}/{}", &tree_sha[..2], &tree_sha[2..]);
         let content = fs::read(path).map_err(|e| e.to_string())?;
         let mut decompressed_data = ZlibDecoder::new(&content[..]);
