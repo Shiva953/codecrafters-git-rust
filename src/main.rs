@@ -15,6 +15,7 @@ fn main() {
         "cat-file" => commands::cat_file::CatFile::run(&args[2..]),
         "hash-object" => commands::hash_object::HashObject::run(&args[2..]),
         "ls-tree" => commands::ls_tree::LsTree::run(&args[2..]),
+        "commit-tree" => commands::commit_tree::CommitTree::run(&args[2..]),
         "write-tree" => commands::write_tree::WriteTree::run(&args[2..]),
         "clone" => commands::clone::Clone::run(&args[2..]),
         _ => Err(format!("Unknown command: {}", args[1])),
